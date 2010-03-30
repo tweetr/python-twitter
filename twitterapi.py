@@ -13,6 +13,7 @@ try:
 	from hashlib import md5
 except ImportError:
 	from md5 import new as md5
+import math
 import os
 import simplejson
 import sys
@@ -1015,6 +1016,15 @@ class Api(object):
         int(count)
     except:
       raise TwitterError("Count must be an integer")
+
+    if count > 3200:
+      raise TwitterError("Count must be less than 3200")
+    elif count > 200:
+        maxpages = int(math.ceil(count / 200))+1
+        count = 200
+    else:
+        maxpages = 2
+
     parameters = {}
     if count:
       parameters['count'] = count
@@ -1028,9 +1038,15 @@ class Api(object):
       raise TwitterError("User must be specified if API is not authenticated.")
     else:
       url = 'http://twitter.com/statuses/user_timeline.json'
-    json = self._FetchUrl(url, parameters=parameters)
-    data = simplejson.loads(json)
-    return [Status.NewFromJsonDict(x) for x in data]
+
+    statuses = []
+    for page in range(1, maxpages):
+      parameters['page'] = page
+      json = self._FetchUrl(url, parameters=parameters)
+      data = simplejson.loads(json)
+      statuses.extend([Status.NewFromJsonDict(x) for x in data])
+
+    return statuses
 
   def GetStatus(self, id):
     '''Returns a single status message.
