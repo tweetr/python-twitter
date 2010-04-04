@@ -1033,11 +1033,63 @@ class Api(object):
     if since_id:
       parameters['since_id'] = since_id
     if user:
-      url = 'http://twitter.com/statuses/user_timeline/%s.json' % user
+      parameters['screen_name'] = user
     elif not user and not self._username:
       raise TwitterError("User must be specified if API is not authenticated.")
+  
+    url = 'http://api.twitter.com/1/statuses/user_timeline.json'
+
+    statuses = []
+    for page in range(1, maxpages):
+      parameters['page'] = page
+      json = self._FetchUrl(url, parameters=parameters)
+      data = simplejson.loads(json)
+      statuses.extend([Status.NewFromJsonDict(x) for x in data])
+
+    return statuses
+
+  def GetHomeTimeline(self, count=None, max_id=None, since_id=None):
+    '''This is the equivalent of /timeline/home on the Web.
+
+    The twitterapi.Api instance must be authenticated.
+
+    Args:
+      count: the number of status messages to retrieve [optional]
+      max_id:
+         Returns only statuses with an ID less than (that is, older than) or
+         equal to the specified ID. [optional]
+      since_id:
+        Returns only statuses with an ID greater than (that is,
+        more recent than) the specified ID. [optional]
+
+    Returns:
+      A sequence of twitterapi.Status instances, one for each message up to count
+    '''
+    try:
+      if count:
+        int(count)
+    except:
+      raise TwitterError("Count must be an integer")
+
+    if count > 3200:
+      raise TwitterError("Count must be less than 3200")
+    elif count > 200:
+        maxpages = int(math.ceil(count / 200))+1
+        count = 200
     else:
-      url = 'http://twitter.com/statuses/user_timeline.json'
+        maxpages = 2
+
+    parameters = {}
+    if count:
+      parameters['count'] = count
+    if max_id:
+      parameters['max_id'] = max_id
+    if since_id:
+      parameters['since_id'] = since_id
+    if not self._username:
+      raise TwitterError("User must be specified if API is not authenticated.")
+    else:
+      url = 'http://api.twitter.com/1/statuses/home_timeline.json'
 
     statuses = []
     for page in range(1, maxpages):
