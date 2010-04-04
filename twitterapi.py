@@ -951,42 +951,53 @@ class Api(object):
     parameters = {}
     if since_id:
       parameters['since_id'] = since_id
-    url = 'http://twitter.com/statuses/public_timeline.json'
+    url = 'http://api.twitter.com/1/statuses/public_timeline.json'
     json = self._FetchUrl(url,  parameters=parameters)
     data = simplejson.loads(json)
     return [Status.NewFromJsonDict(x) for x in data]
 
-  def GetFriendsTimeline(self, user=None, since=None, since_id=None):
+  def GetFriendsTimeline(self, since_id=None, max_id=None, count=None, page=None):
     '''Fetch the sequence of twitterapi.Status messages for a user's friends
 
     The twitterapi.Api instance must be authenticated if the user is private.
 
     Args:
-      user:
-        Specifies the ID or screen name of the user for whom to return
-        the friends_timeline.  If unspecified, the username and password
-        must be set in the twitterapi.Api instance.  [optional]
-      since:
-        Narrows the returned results to just those statuses created
-        after the specified HTTP-formatted date. [optional]
       since_id:
         Returns only statuses with an ID greater than (that is,
         more recent than) the specified ID. [optional]
+      max_id:  Returns only statuses with an ID less than (that is, older than)
+        or equal to the specified ID. [optional]
+      count: Specifies the number of statuses to retrieve. May not be greater
+        than 200. (Note the the number of statuses returned may be smaller than
+        the requested count as retweets are stripped out of the result set for
+        backwards compatibility.)
+      page: Specifies the page of results to retrieve. Note: there are
+        pagination limits.
 
     Returns:
       A sequence of twitterapi.Status instances, one for each message
     '''
-    if user:
-      url = 'http://twitter.com/statuses/friends_timeline/%s.json' % user
-    elif not user and not self._username:
+    if not self._username:
       raise TwitterError("User must be specified if API is not authenticated.")
-    else:
-      url = 'http://twitter.com/statuses/friends_timeline.json'
+    if count:
+      try:
+        count = int(count)
+      except:
+        raise TwitterError("Count must be an Integer")
+      if count > 200:
+        raise TiwtterError("Count must be less than 200")
+
+    url = 'http://api.twitter.com/1/statuses/friends_timeline.json'
     parameters = {}
-    if since:
-      parameters['since'] = since
     if since_id:
       parameters['since_id'] = since_id
+    if max_id:
+      parameters['max_id'] = max_id
+    if count:
+      parameters['count'] = count
+    if page:
+      parameters['page'] = page
+
     json = self._FetchUrl(url, parameters=parameters)
     data = simplejson.loads(json)
     return [Status.NewFromJsonDict(x) for x in data]
@@ -1116,7 +1127,7 @@ class Api(object):
         int(id)
     except:
       raise TwitterError("id must be an integer")
-    url = 'http://twitter.com/statuses/show/%s.json' % id
+    url = 'http://api.twitter.com/1/statuses/show/%s.json' % id
     json = self._FetchUrl(url)
     data = simplejson.loads(json)
     return Status.NewFromJsonDict(data)
@@ -1138,18 +1149,53 @@ class Api(object):
         int(id)
     except:
       raise TwitterError("id must be an integer")
-    url = 'http://twitter.com/statuses/destroy/%s.json' % id
+    url = 'http://api.twitter.com/1/statuses/destroy/%s.json' % id
     json = self._FetchUrl(url, post_data={})
     data = simplejson.loads(json)
     return Status.NewFromJsonDict(data)
 
-  def PostUpdate(self, text):
+  def PostUpdate(self, text, in_reply_to_status_id=None, lat=None, long=None,
+          place_id=None, display_coordinates=None):
     '''Post a twitter status message from the authenticated user.
 
     The twitterapi.Api instance must be authenticated.
 
     Args:
-      text: The message text to be posted.  Must be less than 140 characters.
+     status.  Required.  The text of your status update. URL encode as
+       necessary. Statuses over 140 characters will cause a 403 error to be
+       returned from the API.  Statuses have the same text as a recently posted
+       status from the same user will also cause a 403 error to be returned from
+       the API.  When a 403 is returned due to shortened text or duplicate
+       statuses, the response body will contain details on why the tweet was
+       rejected.
+
+     in_reply_to_status_id.  Optional. The ID of an existing status that the
+       update is in reply to.
+       Note: This parameter will be ignored unless the author of the tweet this
+       parameter references is mentioned within the status text. Therefore, you
+       must include @username, where username is the author of the referenced
+       tweet, within the update.
+
+     lat. Optional. The location's latitude that this tweet refers to.  The
+       valid ranges for latitude is -90.0 to +90.0 (North is positive) inclusive.
+       This parameter will be ignored if outside that range, if it is not a
+       number, if geo_enabled is disabled, or if there not a corresponding long
+       parameter with this tweet.
+
+     long.  Optional. The location's longitude that this tweet refers to.  The
+       valid ranges for longitude is -180.0 to +180.0 (East is positive)
+       inclusive.  This parameter will be ignored if outside that range, if it is
+       not a number, if geo_enabled is disabled, or if there not a corresponding
+       lat parameter with this tweet.
+
+     place_id.  Optional. The place to attach to this status update.  Valid
+       place_ids can be found by querying geo/reverse_geocode.
+
+     display_coordinates. Optional. By default, geo-tweets will have their
+       coordinates exposed in the status object (to remain backwards compatible
+       with existing API applications).  To turn off the display of the
+       precise latitude and longitude (but keep the contextual location
+       information), pass display_coordinates=false on the status update.
 
     Returns:
       A twitterapi.Status instance representing the message posted
@@ -1158,8 +1204,20 @@ class Api(object):
       raise TwitterError("The twitterapi.Api instance must be authenticated.")
     if len(text) > 140:
       raise TwitterError("Text must be less than or equal to 140 characters.")
-    url = 'http://twitter.com/statuses/update.json'
+
+    url = 'http://api.twitter.com/1/statuses/update.json'
     data = {'status': text}
+    if in_reply_to_status_id:
+      data['in_reply_to_status_id'] = in_reply_to_status_id
+    if lat:
+      data['lat'] = lat
+    if long:
+      data['long'] = long
+    if place_id:
+      data['place_id'] = place_id
+    if display_coordinates:
+      data['display_coordinates'] = display_coordinates
+
     json = self._FetchUrl(url, post_data=data)
     data = simplejson.loads(json)
     return Status.NewFromJsonDict(data)
@@ -1245,7 +1303,7 @@ class Api(object):
     data = simplejson.loads(json)
     return User.NewFromJsonDict(data)
 
-  def GetDirectMessages(self, since=None):
+  def GetDirectMessages(self, since_id=None, max_id=None, count=None, page=None):
     '''Returns a list of the direct messages sent to the authenticating user.
 
     The twitterapi.Api instance must be authenticated.
@@ -1258,12 +1316,19 @@ class Api(object):
     Returns:
       A sequence of twitterapi.DirectMessage instances
     '''
-    url = 'http://twitter.com/direct_messages.json'
+    url = 'http://api.twitter.com/1/direct_messages.json'
     if not self._username:
       raise TwitterError("The twitterapi.Api instance must be authenticated.")
     parameters = {}
-    if since:
-      parameters['since'] = since
+    if since_id:
+      parameters['since_id'] = since_id
+    if max_id:
+      parameters['max_id'] = max_id
+    if count:
+      parameters['count'] = count
+    if page:
+      parameters['page'] = page
+
     json = self._FetchUrl(url, parameters=parameters)
     data = simplejson.loads(json)
     return [DirectMessage.NewFromJsonDict(x) for x in data]
@@ -1282,7 +1347,7 @@ class Api(object):
     '''
     if not self._username:
       raise TwitterError("The twitterapi.Api instance must be authenticated.")
-    url = 'http://twitter.com/direct_messages/new.json'
+    url = 'http://api.twitter.com/1/direct_messages/new.json'
     data = {'text': text, 'user': user}
     json = self._FetchUrl(url, post_data=data)
     data = simplejson.loads(json)
@@ -1301,12 +1366,12 @@ class Api(object):
     Returns:
       A twitterapi.DirectMessage instance representing the message destroyed
     '''
-    url = 'http://twitter.com/direct_messages/destroy/%s.json' % id
+    url = 'http://api.twitter.com/1/direct_messages/destroy/%s.json' % id
     json = self._FetchUrl(url, post_data={})
     data = simplejson.loads(json)
     return DirectMessage.NewFromJsonDict(data)
 
-  def CreateFriendship(self, user):
+  def CreateFriendship(self, user, follow=None):
     '''Befriends the user specified in the user parameter as the authenticating user.
 
     The twitterapi.Api instance must be authenticated.
@@ -1316,8 +1381,11 @@ class Api(object):
     Returns:
       A twitterapi.User instance representing the befriended user.
     '''
-    url = 'http://twitter.com/friendships/create/%s.json' % user
-    json = self._FetchUrl(url, post_data={})
+    url = 'http://api.twitter.com/1/friendships/create/%s.json' % user
+    postdata = {}
+    if follow:
+      postdata['follow'] = follow
+    json = self._FetchUrl(url, post_data=postdata)
     data = simplejson.loads(json)
     return User.NewFromJsonDict(data)
 
@@ -1331,10 +1399,46 @@ class Api(object):
     Returns:
       A twitterapi.User instance representing the discontinued friend.
     '''
-    url = 'http://twitter.com/friendships/destroy/%s.json' % user
-    json = self._FetchUrl(url, post_data={})
+    url = 'http://api.twitter.com/1/friendships/destroy/%s.json' % user
+    postdata = {}
+    json = self._FetchUrl(url, post_data=postdata)
     data = simplejson.loads(json)
     return User.NewFromJsonDict(data)
+
+  def ShowFriendship(self, target, source=None):
+    '''Returns detailed information about the relationship between two users.
+
+    The twitterapi.Api instance must be authenticated if the source_id or
+    source_screen_name is not provided.
+
+    Args:
+      source_id: the user_id of the subject user
+      source_screen_name: the screen_name of the subject user
+      target_id: the user_id of the target user
+      target_user_screen_name: the scree_name of the target user
+
+    Returns:
+      A dict (should be a twitterapi.Relationship instance)
+    '''
+    url = 'http://api.twitter.com/1/friendships/show.json'
+    parameters = {}
+    if source:
+      try:
+        int(source)
+        parameters['source_id'] = source
+      except:
+        parameters['source_screen_name'] = source
+
+    try:
+      int(target)
+      parameters['target_id'] = target
+    except:
+      parameters['target_screen_name'] = target
+
+    json = self._FetchUrl(url, parameters=parameters)
+    data = simplejson.loads(json)
+    #return Relationship.NewFromJsonDict(data)
+    return data
 
   def CreateFavorite(self, status):
     '''Favorites the status specified in the status parameter as the authenticating user.
@@ -1347,7 +1451,7 @@ class Api(object):
     Returns:
       A twitterapi.Status instance representing the newly-marked favorite.
     '''
-    url = 'http://twitter.com/favorites/create/%s.json' % status.id
+    url = 'http://api.twitter.com/1/favorites/create/%s.json' % status.id
     json = self._FetchUrl(url, post_data={})
     data = simplejson.loads(json)
     return Status.NewFromJsonDict(data)
@@ -1363,7 +1467,7 @@ class Api(object):
     Returns:
       A twitterapi.Status instance representing the newly-unmarked favorite.
     '''
-    url = 'http://twitter.com/favorites/destroy/%s.json' % status.id
+    url = 'http://api.twitter.com/1/favorites/destroy/%s.json' % status.id
     json = self._FetchUrl(url, post_data={})
     data = simplejson.loads(json)
     return Status.NewFromJsonDict(data)
