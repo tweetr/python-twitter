@@ -41,6 +41,12 @@ class Status(object):
     status.text
     status.relative_created_at # read only
     status.user
+    status.in_reply_to_status_id
+    status.in_reply_to_user_id
+    status.source
+    status.truncated
+    status.retweeted
+    status.retweeted_status
   '''
   def __init__(self,
                created_at=None,
@@ -48,6 +54,9 @@ class Status(object):
                id=None,
                text=None,
                user=None,
+               truncated=None,
+               retweeted=None,
+               retweeted_status=None,
                now=None):
     '''An object to hold a Twitter status message.
 
@@ -75,6 +84,8 @@ class Status(object):
     self.text = text
     self.user = user
     self.now = now
+    self.retweeted = retweeted
+    self.retweeted_status = retweeted_status
 
   def GetCreatedAt(self):
     '''Get the time this status message was posted.
@@ -312,7 +323,12 @@ class Status(object):
                   favorited=data.get('favorited', None),
                   id=data.get('id', None),
                   text=data.get('text', None),
-                  user=user)
+                  user=user, 
+                  truncated=data.get('truncated', None),
+                  retweeted=True if data.get('retweeted_status', None) else False,
+                  retweeted_status=Status.NewFromJsonDict(data.get('retweeted_status',
+                      None)) if data.get('retweeted_status', None) else None
+                  )
 
 
 class User(object):
@@ -1110,6 +1126,91 @@ class Api(object):
       statuses.extend([Status.NewFromJsonDict(x) for x in data])
 
     return statuses
+
+  def GetRetweetsByMe(self, count=None, max_id=None, since_id=None, page=None):
+    '''Returns the most recent retweets posted by the authenticating user.
+
+    The twitterapi.Api instance must be authenticated.
+
+    Args:
+      count: the number of status messages to retrieve [optional]
+      max_id:
+         Returns only statuses with an ID less than (that is, older than) or
+         equal to the specified ID. [optional]
+      since_id:
+        Returns only statuses with an ID greater than (that is,
+        more recent than) the specified ID. [optional]
+
+    Returns:
+      A sequence of twitterapi.Status instances, one for each message up to count
+    '''
+    try:
+      if count:
+        int(count)
+    except:
+      raise TwitterError("Count must be an integer")
+
+    parameters = {}
+    if count:
+      parameters['count'] = count
+    if max_id:
+      parameters['max_id'] = max_id
+    if since_id:
+      parameters['since_id'] = since_id
+    if page:
+      parameters['page'] = page
+    if not self._username:
+      raise TwitterError("User must be specified.")
+    else:
+      url = 'http://api.twitter.com/1/statuses/retweeted_by_me.json'
+
+    json = self._FetchUrl(url, parameters=parameters)
+    data = simplejson.loads(json)
+    return [Status.NewFromJsonDict(x) for x in data]
+
+
+  def GetRetweetsToMe(self, count=None, max_id=None, since_id=None, page=None):
+    '''This is the equivalent of /timeline/home on the Web.
+
+    The twitterapi.Api instance must be authenticated.
+
+    Args:
+      count: the number of status messages to retrieve [optional]
+      max_id:
+         Returns only statuses with an ID less than (that is, older than) or
+         equal to the specified ID. [optional]
+      since_id:
+        Returns only statuses with an ID greater than (that is,
+        more recent than) the specified ID. [optional]
+
+    Returns:
+      A sequence of twitterapi.Status instances, one for each message up to count
+    '''
+    try:
+      if count:
+        int(count)
+    except:
+      raise TwitterError("Count must be an integer")
+
+    parameters = {}
+    if count:
+      parameters['count'] = count
+    if max_id:
+      parameters['max_id'] = max_id
+    if since_id:
+      parameters['since_id'] = since_id
+    if page:
+      parameters['page'] = page 
+
+    if not self._username:
+      raise TwitterError("User must be specified.")
+    else:
+      url = 'http://api.twitter.com/1/statuses/retweeted_to_me.json'
+
+    json = self._FetchUrl(url, parameters=parameters)
+    data = simplejson.loads(json)
+    return [Status.NewFromJsonDict(x) for x in data]
+
 
   def GetStatus(self, id):
     '''Returns a single status message.
